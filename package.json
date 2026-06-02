@@ -9,10 +9,20 @@
     "web": "expo start --web"
   },
   "dependencies": {
+    "@gorhom/bottom-sheet": "^5.2.14",
+    "@react-native-async-storage/async-storage": "^3.1.1",
+    "@react-navigation/native": "^7.2.5",
+    "@react-navigation/stack": "^7.9.3",
+    "axios": "^1.16.1",
     "expo": "~54.0.34",
     "expo-status-bar": "~3.0.9",
     "react": "19.1.0",
-    "react-native": "0.81.5"
+    "react-native": "0.81.5",
+    "react-native-gesture-handler": "^3.0.0",
+    "react-native-reanimated": "^4.4.0",
+    "react-native-safe-area-context": "^5.8.0",
+    "react-native-screens": "^4.25.2",
+    "react-native-webview": "^13.8.6"
   },
   "private": true
 }

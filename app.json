@@ -1,29 +1,29 @@
 {
   "expo": {
     "name": "Ominx",
-    "slug": "Ominx",
+    "slug": "ominx",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "userInterfaceStyle": "dark",
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
-    "ios": {
-      "supportsTablet": true
+      "backgroundColor": "#000000"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#000000"
       },
-      "edgeToEdgeEnabled": true
+      "package": "com.ominx.browser",
+      "versionCode": 1,
+      "permissions": ["INTERNET"]
     },
-    "web": {
-      "favicon": "./assets/favicon.png"
+    "extra": {
+      "eas": {
+        "projectId": "59139571-8dfe-4cd6-90e9-44540d9bb185"
+      }
     }
   }
 }
