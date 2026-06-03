@@ -1,12 +1,11 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import {
   View,
   StyleSheet,
-  SafeAreaView,
-  StatusBar,
-  KeyboardAvoidingView,
   Platform,
+  StatusBar,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Omnibox from '../components/Omnibox';
 import BrowserView from '../components/BrowserView';
 import TabBar from '../components/TabBar';
@@ -18,8 +17,18 @@ import { askGemini } from '../services/geminiService';
 import { isURL, formatURL } from '../utils/urlHelper';
 
 export default function HomeScreen() {
+  const insets = useSafeAreaInsets();
+  const isRequestInFlight = useRef(false);
+
   const [tabs, setTabs] = useState([
-    { id: '1', url: 'https://www.google.com', title: 'New Tab', favicon: null, canGoBack: false, canGoForward: false }
+    {
+      id: '1',
+      url: 'https://www.google.com',
+      title: 'New Tab',
+      favicon: null,
+      canGoBack: false,
+      canGoForward: false,
+    },
   ]);
   const [activeTabId, setActiveTabId] = useState('1');
   const [omniboxText, setOmniboxText] = useState('');
@@ -30,14 +39,21 @@ export default function HomeScreen() {
   const [aiLoading, setAiLoading] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
-  const [isBrowsing, setIsBrowsing] = useState(false);
+  const [isBrowsing, setIsBrowsing] = useState(true);
 
   const webviewRefs = useRef({});
+  const activeTab = tabs.find((t) => t.id === activeTabId);
 
-  const activeTab = tabs.find(t => t.id === activeTabId);
+  const updateTabURL = useCallback((tabId, url) => {
+    setTabs((prev) =>
+      prev.map((tab) => (tab.id === tabId ? { ...tab, url } : tab))
+    );
+  }, []);
 
-  const handleOmniboxSubmit = async (text) => {
+  const handleOmniboxSubmit = useCallback(async (text) => {
     if (!text.trim()) return;
+    if (isRequestInFlight.current) return;
+
     setOmniboxText(text);
 
     if (isURL(text)) {
@@ -45,45 +61,54 @@ export default function HomeScreen() {
       updateTabURL(activeTabId, url);
       setIsBrowsing(true);
       setIsSearchResultsVisible(false);
-    } else {
-      setIsBrowsing(false);
-      setIsSearchResultsVisible(true);
-      setSearchLoading(true);
-      setAiLoading(true);
-      setIsAISheetVisible(true);
+      setIsAISheetVisible(false);
+      return;
+    }
 
+    isRequestInFlight.current = true;
+    setIsBrowsing(false);
+    setIsSearchResultsVisible(true);
+    setSearchLoading(true);
+    setAiLoading(true);
+    setIsAISheetVisible(true);
+    setSearchResults([]);
+    setAiAnswer('');
+
+    try {
       const [results, aiResponse] = await Promise.all([
         searchGoogle(text),
         askGemini(text),
       ]);
-
       setSearchResults(results);
-      setSearchLoading(false);
       setAiAnswer(aiResponse.answer);
+    } catch (error) {
+      setAiAnswer('Something went wrong. Please try again.');
+      setSearchResults([]);
+    } finally {
+      setSearchLoading(false);
       setAiLoading(false);
+      isRequestInFlight.current = false;
     }
-  };
+  }, [activeTabId, updateTabURL]);
 
-  const updateTabURL = (tabId, url) => {
-    setTabs(prev => prev.map(tab =>
-      tab.id === tabId ? { ...tab, url } : tab
-    ));
-  };
-
-  const handleNavigationChange = (navState) => {
-    setTabs(prev => prev.map(tab =>
-      tab.id === activeTabId ? {
-        ...tab,
-        url: navState.url,
-        title: navState.title || 'Loading...',
-        canGoBack: navState.canGoBack,
-        canGoForward: navState.canGoForward,
-      } : tab
-    ));
+  const handleNavigationChange = useCallback((navState) => {
+    setTabs((prev) =>
+      prev.map((tab) =>
+        tab.id === activeTabId
+          ? {
+              ...tab,
+              url: navState.url,
+              title: navState.title || 'Loading...',
+              canGoBack: navState.canGoBack,
+              canGoForward: navState.canGoForward,
+            }
+          : tab
+      )
+    );
     setOmniboxText(navState.url);
-  };
+  }, [activeTabId]);
 
-  const handleTabCreate = () => {
+  const handleTabCreate = useCallback(() => {
     if (tabs.length >= 5) return;
     const newTab = {
       id: Date.now().toString(),
@@ -93,83 +118,112 @@ export default function HomeScreen() {
       canGoBack: false,
       canGoForward: false,
     };
-    setTabs(prev => [...prev, newTab]);
+    setTabs((prev) => [...prev, newTab]);
     setActiveTabId(newTab.id);
     setIsBrowsing(true);
     setIsSearchResultsVisible(false);
-  };
+    setIsAISheetVisible(false);
+  }, [tabs.length]);
 
-  const handleTabClose = (id) => {
+  const handleTabClose = useCallback((id) => {
     if (tabs.length === 1) return;
-    const newTabs = tabs.filter(tab => tab.id !== id);
+    const newTabs = tabs.filter((tab) => tab.id !== id);
     setTabs(newTabs);
     if (activeTabId === id) {
       setActiveTabId(newTabs[newTabs.length - 1].id);
     }
-  };
+  }, [tabs, activeTabId]);
 
-  const handleTabSwitch = (id) => {
+  const handleTabSwitch = useCallback((id) => {
     setActiveTabId(id);
     setIsTabSwitcherVisible(false);
     setIsBrowsing(true);
     setIsSearchResultsVisible(false);
-  };
+    setIsAISheetVisible(false);
+  }, []);
 
-  const handleBack = () => {
+  const handleBack = useCallback(() => {
     webviewRefs.current[activeTabId]?.goBack();
-  };
+  }, [activeTabId]);
 
-  const handleForward = () => {
+  const handleForward = useCallback(() => {
     webviewRefs.current[activeTabId]?.goForward();
-  };
+  }, [activeTabId]);
 
-  const handleRefresh = () => {
+  const handleRefresh = useCallback(() => {
     webviewRefs.current[activeTabId]?.reload();
-  };
+  }, [activeTabId]);
 
-  const handleHome = () => {
+  const handleHome = useCallback(() => {
     updateTabURL(activeTabId, 'https://www.google.com');
     setIsBrowsing(true);
     setIsSearchResultsVisible(false);
-  };
+    setIsAISheetVisible(false);
+  }, [activeTabId, updateTabURL]);
 
-  const handleResultPress = (url) => {
+  const handleResultPress = useCallback((url) => {
     updateTabURL(activeTabId, url);
     setIsBrowsing(true);
     setIsSearchResultsVisible(false);
     setIsAISheetVisible(false);
-  };
+  }, [activeTabId, updateTabURL]);
 
   return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <StatusBar barStyle="light-content" backgroundColor="#000000" />
+
+      {isBrowsing && (
+        <BrowserView
+          tabs={tabs}
+          activeTabId={activeTabId}
+          onNavigationChange={handleNavigationChange}
+          webviewRefs={webviewRefs}
+        />
+      )}
+
+      {isSearchResultsVisible && (
+        <SearchResults
+          results={searchResults}
+          loading={searchLoading}
+          onResultPress={handleResultPress}
+        />
+      )}
+
+      {isAISheetVisible && (
+        <AIAnswerSheet
+          visible={isAISheetVisible}
+          answer={aiAnswer}
+          loading={aiLoading}
+          onDismiss={() => setIsAISheetVisible(false)}
+          onSearchWeb={() => {
+            setIsAISheetVisible(false);
+            updateTabURL(
+              activeTabId,
+              `https://www.google.com/search?q=${encodeURIComponent(omniboxText)}`
+            );
+            setIsBrowsing(true);
+            setIsSearchResultsVisible(false);
+          }}
+        />
+      )}
+
+      {isTabSwitcherVisible && (
+        <TabSwitcher
+          tabs={tabs}
+          activeTabId={activeTabId}
+          onSwitch={handleTabSwitch}
+          onClose={handleTabClose}
+          onNew={handleTabCreate}
+          onDismiss={() => setIsTabSwitcherVisible(false)}
+        />
+      )}
+<View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <Omnibox
           value={omniboxText}
           onChangeText={setOmniboxText}
           onSubmit={handleOmniboxSubmit}
           currentURL={activeTab?.url || ''}
         />
-
-        {isBrowsing && (
-          <BrowserView
-            tabs={tabs}
-            activeTabId={activeTabId}
-            onNavigationChange={handleNavigationChange}
-            webviewRefs={webviewRefs}
-          />
-        )}
-
-        {isSearchResultsVisible && (
-          <SearchResults
-            results={searchResults}
-            loading={searchLoading}
-            onResultPress={handleResultPress}
-          />
-        )}
-
         <TabBar
           onBack={handleBack}
           onForward={handleForward}
@@ -181,34 +235,8 @@ export default function HomeScreen() {
           canGoBack={activeTab?.canGoBack || false}
           canGoForward={activeTab?.canGoForward || false}
         />
-
-        {isTabSwitcherVisible && (
-          <TabSwitcher
-            tabs={tabs}
-            activeTabId={activeTabId}
-            onSwitch={handleTabSwitch}
-            onClose={handleTabClose}
-            onNew={handleTabCreate}
-            onDismiss={() => setIsTabSwitcherVisible(false)}
-          />
-        )}
-
-        {isAISheetVisible && (
-          <AIAnswerSheet
-            visible={isAISheetVisible}
-            answer={aiAnswer}
-            loading={aiLoading}
-            onDismiss={() => setIsAISheetVisible(false)}
-            onSearchWeb={() => {
-              setIsAISheetVisible(false);
-              updateTabURL(activeTabId, `https://www.google.com/search?q=${encodeURIComponent(omniboxText)}`);
-              setIsBrowsing(true);
-              setIsSearchResultsVisible(false);
-            }}
-          />
-        )}
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+      </View>
+    </View>
   );
 }
 
@@ -216,6 +244,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000000',
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+  },
+  bottomBar: {
+    backgroundColor: '#000000',
+    borderTopWidth: 1,
+    borderTopColor: '#1a1a3a',
   },
 });
